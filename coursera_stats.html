@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coursera Statistics</title>
+    <!-- Including PapaParse for CSV parsing -->
+    <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+    <!-- Including SheetJS for Excel parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            background-color: #0056d2;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .section {
+            background-color: #1a3c34;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background-color: #f9f9f9;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 5px;
+            text-align: center;
+            width: 120px;
+        }
+        .stat-box img {
+            width: 40px;
+            height: 40px;
+        }
+        .filter {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .upload {
+            margin: 20px 0;
+            text-align: center;
+        }
+        select, input[type="file"] {
+            padding: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+            background-color: #0056d2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #003d99;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">OVERALL PROGRAM UPDATE</div>
+        <div class="section">Coursera Statistics</div>
+
+        <!-- File Upload Section -->
+        <div class="upload">
+            <label for="fileUpload">Upload Dataset (CSV/Excel): </label>
+            <input type="file" id="fileUpload" accept=".csv, .xlsx, .xls, .xlsm" onchange="loadData()">
+        </div>
+
+        <!-- Business Unit Filter with Apply Button -->
+        <div class="filter">
+            <label for="businessUnitFilter">Filter by Business Unit: </label>
+            <select id="businessUnitFilter">
+                <option value="">All Business Units</option>
+            </select>
+            <button onclick="updateStatistics()">Apply Filter</button>
+        </div>
+
+        <!-- Statistics Section with Icons -->
+        <div class="stats" id="stats">
+            <div class="stat-box">
+                <img src="https://img.icons8.com/ios-filled/50/000000/user.png" alt="Officers Onboarded">
+                <div id="officersOnboarded">0</div>
+                <div>No. of Officers Onboarded</div>
+            </div>
+            <div class="stat-box">
+                <img src="https://img.icons8.com/ios-filled/50/000000/user.png" alt="Unique Officers Completed">
+                <div id="uniqueOfficersCompleted">0</div>
+                <div>Unique Officers Completed at least 1 course</div>
+            </div>
+            <div class="stat-box">
+                <img src="https://img.icons8.com/ios-filled/50/000000/graduation-cap.png" alt="Courses Enrolled">
+                <div id="coursesEnrolled">0</div>
+                <div>No. of courses Enrolled</div>
+            </div>
+            <div class="stat-box">
+                <img src="https://img.icons8.com/ios-filled/50/000000/graduation-scroll.png" alt="Courses Completed">
+                <div id="coursesCompleted">0</div>
+                <div>No. of Courses Completed</div>
+            </div>
+            <div class="stat-box">
+                <img src="https://img.icons8.com/ios-filled/50/000000/clock.png" alt="Learning Hours">
+                <div id="learningHours">0</div>
+                <div>Learning Hours Completed</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let data = [];
+        let businessUnits = [];
+
+        // Normalize column names for flexibility
+        function normalizeColumnName(name) {
+            if (!name) return "";
+            return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        // Find column names in the dataset
+        function findColumn(headers, possibleNames) {
+            const normalizedHeaders = headers.map(h => normalizeColumnName(h));
+            for (let name of possibleNames) {
+                const normalizedName = normalizeColumnName(name);
+                const index = normalizedHeaders.indexOf(normalizedName);
+                if (index !== -1) return headers[index];
+            }
+            return null;
+        }
+
+        // Function to load and parse the uploaded dataset
+        function loadData() {
+            const fileInput = document.getElementById("fileUpload");
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please upload a CSV or Excel file.");
+                return;
+            }
+
+            // Reset previous data
+            data = [];
+            businessUnits = [];
+            const select = document.getElementById("businessUnitFilter");
+            select.innerHTML = '<option value="">All Business Units</option>';
+
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            const reader = new FileReader();
+
+            if (fileExtension === 'csv') {
+                reader.onload = function(e) {
+                    Papa.parse(e.target.result, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: false,
+                        transformHeader: (header) => header.trim().replace(/^"|"$/g, ''),
+                        transform: (value) => value ? value.trim().replace(/^"|"$/g, '') : '',
+                        complete: (results) => {
+                            data = results.data;
+                            populateBusinessUnits();
+                            updateStatistics();
+                        },
+                        error: (err) => {
+                            console.error(err);
+                            alert("Error parsing the CSV file.");
+                        }
+                    });
+                };
+                reader.readAsText(file);
+            } else if (['xlsx', 'xls', 'xlsm'].includes(fileExtension)) {
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                    const firstSheet = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheet];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    // Convert to PapaParse-like format
+                    const headers = jsonData[0];
+                    const rows = jsonData.slice(1).map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = row[index] ? row[index].toString().trim() : '';
+                        });
+                        return obj;
+                    });
+
+                    data = rows.filter(row => Object.values(row).some(val => val !== ''));
+                    populateBusinessUnits();
+                    updateStatistics();
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Unsupported file format. Please upload a CSV, XLSX, XLS, or XLSM file.");
+            }
+        }
+
+        // Populating the Business Unit dropdown
+        function populateBusinessUnits() {
+            if (!data.length) return;
+
+            // Find the Business Unit column
+            const headers = Object.keys(data[0]);
+            const businessUnitColumn = findColumn(headers, ["Business Unit", "businessunit", "business_unit", "BusinessUnit"]);
+            if (!businessUnitColumn) {
+                alert("Business Unit column not found in the dataset.");
+                return;
+            }
+
+            const businessUnitSet = new Set(data.map(row => row[businessUnitColumn]).filter(unit => unit));
+            businessUnits = [...businessUnitSet].sort();
+            const select = document.getElementById("businessUnitFilter");
+            businessUnits.forEach(unit => {
+                const option = document.createElement("option");
+                option.value = unit;
+                option.textContent = unit;
+                select.appendChild(option);
+            });
+        }
+
+        // Updating statistics based on selected Business Unit
+        function updateStatistics() {
+            if (!data.length) return;
+
+            // Find necessary columns
+            const headers = Object.keys(data[0]);
+            const businessUnitColumn = findColumn(headers, ["Business Unit", "businessunit", "business_unit", "BusinessUnit"]);
+            const nameColumn = findColumn(headers, ["Name", "name", "Officer Name", "officername"]);
+            const completedColumn = findColumn(headers, ["Completed", "completed", "Completion Status", "completionstatus"]);
+            const hoursColumn = findColumn(headers, ["Estimated Learning Hours", "estimatedlearninghours", "Learning Hours", "learninghours"]);
+
+            if (!businessUnitColumn || !nameColumn || !completedColumn || !hoursColumn) {
+                alert("Required columns (Business Unit, Name, Completed, Estimated Learning Hours) not found in the dataset.");
+                return;
+            }
+
+            const selectedUnit = document.getElementById("businessUnitFilter").value;
+            const filteredData = selectedUnit ? data.filter(row => row[businessUnitColumn] === selectedUnit) : data;
+
+            // Calculating unique officers onboarded
+            const officersOnboarded = new Set(filteredData.map(row => row[nameColumn])).size;
+
+            // Calculating unique officers who completed at least 1 course
+            const completedCourses = filteredData.filter(row => row[completedColumn]?.toLowerCase() === "yes");
+            const uniqueOfficersCompleted = new Set(completedCourses.map(row => row[nameColumn])).size;
+
+            // Calculating total courses enrolled
+            const coursesEnrolled = filteredData.length;
+
+            // Calculating total courses completed
+            const coursesCompleted = completedCourses.length;
+
+            // Calculating total learning hours
+            const learningHours = filteredData.reduce((sum, row) => {
+                const hours = parseFloat(row[hoursColumn]);
+                return sum + (isNaN(hours) ? 0 : hours);
+            }, 0).toFixed(2);
+
+            // Updating the DOM
+            document.getElementById("officersOnboarded").textContent = officersOnboarded;
+            document.getElementById("uniqueOfficersCompleted").textContent = uniqueOfficersCompleted;
+            document.getElementById("coursesEnrolled").textContent = coursesEnrolled;
+            document.getElementById("coursesCompleted").textContent = coursesCompleted;
+            document.getElementById("learningHours").textContent = learningHours;
+        }
+    </script>
+</body>
+</html>
